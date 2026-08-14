@@ -353,8 +353,8 @@ const GIVEAWAY_IMAGE_URL = "https://files.catbox.moe/72s3dg.jpg";
 // Force join default channels — hardcoded by admin
 // IDs can be updated via /setforcejoin; links/labels always come from defaults
 const DEFAULT_FORCE_CHANNELS = [
-  { id: null, link: "https://t.me/+aMvgXc_nnNAzNThl", label: "🎁 Free Contents" },
-  { id: "-1003984623458", link: "https://t.me/+uv1o-BJg3mE3ZmQ1", label: "📢 Updates" }
+  { id: null, link: "https://t.me/xvilucifer", label: "🎁 Free Contents" },
+  { id: "-1003984623458", link: "https://t.me/II_THE_FUCKERZ_ERA_II", label: "📢 Updates" }
 ];
 
 // ============================================================
