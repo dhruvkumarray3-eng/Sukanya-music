@@ -348,7 +348,7 @@ let freeGiveawayLimit = 15;   // max giveaways a free user can create
 let freeUnlimited = false;     // if true, all users can create unlimited giveaways
 
 // Default giveaway / channel post image (attached to all channel posts)
-const GIVEAWAY_IMAGE_URL = "https://files.catbox.moe/72s3dg.jpg";
+const GIVEAWAY_IMAGE_URL = "https://files.catbox.moe/ntibim.png";
 
 // Force join default channels — hardcoded by admin
 // IDs can be updated via /setforcejoin; links/labels always come from defaults
