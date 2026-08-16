@@ -24,6 +24,7 @@ before starting the bot. The complete Telegram command inventory is in
 | `TELEGRAM_BOT_TOKEN` | Bot token from @BotFather |
 | `ADMIN_ID` | Your Telegram numeric user ID |
 | `MONGODB_URI` | MongoDB Atlas connection string |
+| `GROQ_API_KEY` | Groq API key for the AI Assistant button |
 | `GITHUB_TOKEN` | GitHub PAT for pushing code changes |
 
 ## User preferences

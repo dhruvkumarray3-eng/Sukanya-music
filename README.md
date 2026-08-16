@@ -1087,7 +1087,7 @@ All bot logic lives in a **single file** — `vote-bot.mjs` — making it easy t
 ```
 
 [![Telegram](https://img.shields.io/badge/Bot-@Nobitavotebot-2CA5E0?style=for-the-badge&logo=telegram&logoColor=white)](https://t.me/Nobitavotebot)
-[![Developer](https://img.shields.io/badge/Developer-@rchiex-2CA5E0?style=for-the-badge&logo=telegram&logoColor=white)](https://t.me/rchiex)
+[![Developer](https://img.shields.io/badge/Developer-@xvilucifer-2CA5E0?style=for-the-badge&logo=telegram&logoColor=white)](https://t.me/xvilucifer)
 [![GitHub](https://img.shields.io/badge/Owner-dhruvkumarray3--eng-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/dhruvkumarray3-eng)
 
 </div>

@@ -12,6 +12,8 @@ import http from "http";
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const MAIN_ADMIN_ID = Number(process.env.ADMIN_ID);
 const MONGODB_URI = process.env.MONGODB_URI;
+const GROQ_API_KEY = process.env.GROQ_API_KEY;
+const GROQ_MODEL = "llama-3.3-70b-versatile";
 
 if (!BOT_TOKEN) { console.error("❌ TELEGRAM_BOT_TOKEN not set!"); process.exit(1); }
 if (!MAIN_ADMIN_ID) { console.error("❌ ADMIN_ID not set!"); process.exit(1); }
@@ -203,6 +205,42 @@ function getAllPremiumEmojiTags(fallback = "✨") {
   if (premiumEmojis.length === 0) return fallback;
   return premiumEmojis.slice(0, 5).map(e => `<tg-emoji emoji-id="${e.id}">${fallback}</tg-emoji>`).join(" ");
 }
+
+async function askGroq(prompt) {
+  if (!GROQ_API_KEY) {
+    throw new Error("GROQ_API_KEY is not configured");
+  }
+
+  const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${GROQ_API_KEY}`,
+    },
+    body: JSON.stringify({
+      model: GROQ_MODEL,
+      temperature: 0.7,
+      max_tokens: 900,
+      messages: [
+        {
+          role: "system",
+          content:
+            "You are a helpful Telegram bot assistant. Reply in the same language as the user, usually concise Hindi or Hinglish. Be practical, friendly, and never claim to perform actions you cannot perform.",
+        },
+        { role: "user", content: prompt },
+      ],
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Groq API returned ${response.status}`);
+  }
+
+  const result = await response.json();
+  const answer = result.choices?.[0]?.message?.content?.trim();
+  if (!answer) throw new Error("Groq API returned an empty response");
+  return answer;
+}
 let membershipPayCounter = 1;
 let welcomeImageUrl = null;
 const voteVelocity = new Map(); // "gId:partId" → { count, windowStart, alerted }
@@ -269,12 +307,12 @@ const DEFAULT_UI_TEXTS = {
   "welcome.tip1":              "🔺 ᴛᴀᴘ 🎁 ɴᴇᴡ ɢɪᴠᴇᴀᴡᴀʏ ʙᴜᴛᴛᴏɴ ᴛᴏ ᴄʀᴇᴀᴛᴇ ᴀ ɢɪᴠᴇᴀᴡᴀʏ ⭐",
   "welcome.tip2":              "🔺 ᴛᴀᴘ 📂 ᴍʏ ɢɪᴠᴇᴀᴡᴀʏꜱ ʙᴜᴛᴛᴏɴ ᴛᴏ ᴠɪᴇᴡ ʏᴏᴜʀ ɢɪᴠᴇᴀᴡᴀʏꜱ ⭐️",
   "welcome.divider":           "✈️━━━━━ 𝐍𝐎𝐁𝐈𝐓𝐀 ━━━━━✈️",
-  "welcome.divider_url":       "https://t.me/rchiex",
+  "welcome.divider_url":       "https://t.me/xvilucifer",
   "welcome.powered":           "⚡️ ᴘᴏᴡᴇʀᴇᴅ : 𝐍𝐎𝐁𝐈𝐓𝐀 ɴᴇᴛᴡᴏʀᴋ 🔥",
-  "welcome.powered_url":       "https://t.me/rchiex",
+  "welcome.powered_url":       "https://t.me/xvilucifer",
   "welcome.powered_name":      "𝐍𝐎𝐁𝐈𝐓𝐀 ɴᴇᴛᴡᴏʀᴋ",
   "welcome.support":           "🔥 ꜱᴜᴘᴘᴏʀᴛ :— 𝐀𝐁𝐇𝐈𝐒𝐇𝐄𝐊 🔥",
-  "welcome.support_url":       "https://t.me/nobitasupport",
+  "welcome.support_url":       "https://t.me/xvilucifer",
   "welcome.support_name":      "𝐀𝐁𝐇𝐈𝐒𝐇𝐄𝐊",
   // ── Welcome Screen — Buttons ──
   "welcome.btn_new_giveaway":  "`ɴᴇᴡ ɢɪᴠᴇᴀᴡᴀʏ, 🎁",
@@ -284,6 +322,7 @@ const DEFAULT_UI_TEXTS = {
   "welcome.btn_vip":           "`ᴠɪᴘ ᴍᴇᴍʙᴇʀꜱʜɪᴘ, 👑",
   "welcome.btn_create_post":   "`ᴄʀᴇᴀᴛᴇ ᴘᴏꜱᴛ, 🚀",
   "welcome.btn_guide":         "`ɢᴜɪᴅᴇ & ʜᴇʟᴘ,",
+  "welcome.btn_ai":            "`ɢʀᴏǫ ᴀɪ, 🤖",
   // ── Legacy keys (kept for compatibility) ──
   "welcome.header":            "🎁 <b>𝑵𝑶𝑩𝑰𝑻𝑨 GIVEAWAY BOT</b> 🎁",
   "welcome.tagline":           "✦ Fair · Fast · Automated ✦",
@@ -1412,6 +1451,7 @@ function mainMenuKeyboard() {
         { text: btn("welcome.btn_vip"),         callback_data: "vip_membership", style: "danger"  },
         { text: btn("welcome.btn_create_post"), callback_data: "create_post",    style: "primary" }
       ],
+      [{ text: btn("welcome.btn_ai"),             callback_data: "ai_assistant",  style: "primary" }],
       [{ text: btn("welcome.btn_guide"),        callback_data: "how_to_use",     style: "success" }]
     ]
   };
@@ -1926,6 +1966,20 @@ bot.on("callback_query", async (query) => {
     userState.delete(userId);
     try { await bot.deleteMessage(chatId, msgId); } catch {}
     await sendWelcome(chatId, userId);
+    return;
+  }
+
+  // ─── Groq AI assistant ───
+  if (data === "ai_assistant") {
+    userState.set(userId, { step: "ai_prompt" });
+    await bot.answerCallbackQuery(query.id).catch(() => {});
+    await bot.sendMessage(
+      chatId,
+      `🤖 <b>Groq AI Assistant</b>\n\n` +
+      `Apna sawaal ya task bhejiye. Main Hindi/Hinglish mein help karunga.\n\n` +
+      `<i>Example: “Mere liye ek giveaway announcement likho.”</i>`,
+      { parse_mode: "HTML", reply_markup: cancelKeyboard() }
+    );
     return;
   }
 
@@ -3499,7 +3553,7 @@ bot.on("callback_query", async (query) => {
           `<blockquote>` +
           `Aapka issue abhi bhi review mein hai.\n\n` +
           `Admin se directly contact karein:\n` +
-          `📩 <b>@nobitasupport</b>` +
+          `📩 <b>@xvilucifer</b>` +
           `</blockquote>\n\n` +
           `✦ ─── <b>𝑵𝑶𝑩𝑰𝑻𝑨 NETWORK</b> ─── ✦`,
           { parse_mode: "HTML" }
@@ -3586,7 +3640,7 @@ bot.on("callback_query", async (query) => {
     );
     try {
       await bot.sendMessage(pending.userId,
-        `<b>❌ Membership Payment Rejected</b>\n\nPayment ID: <code>${payId}</code>\n\nYour payment could not be verified. Please try again or contact @nobitasupport.`,
+        `<b>❌ Membership Payment Rejected</b>\n\nPayment ID: <code>${payId}</code>\n\nYour payment could not be verified. Please try again or contact @xvilucifer.`,
         { parse_mode: "HTML" }
       );
     } catch {}
@@ -4176,7 +4230,7 @@ bot.on("callback_query", async (query) => {
         `<blockquote>◈ Giveaway ▸ <b>${_rejG ? h(_rejG.title) : payment.giveawayId}</b>\n` +
         `◈ Pay ID   ▸ <code>${payId}</code>\n\n` +
         `Aapka payment verify nahi ho saka. Sahi screenshot bhejein ya support se contact karein.\n` +
-        `📩 @nobitasupport</blockquote>`,
+         `📩 @xvilucifer</blockquote>`,
         { parse_mode: "HTML" }
       );
     } catch {}
@@ -4645,6 +4699,32 @@ bot.on("message", async (msg) => {
   const text = msg.text?.trim() || "";
   const state = userState.get(userId);
 
+  // ─── Groq AI prompt ───
+  if (state?.step === "ai_prompt") {
+    if (!text || text.startsWith("/")) {
+      await bot.sendMessage(chatId, "🤖 AI ke liye apna sawaal text mein bhejiye.");
+      return;
+    }
+
+    userState.delete(userId);
+    await bot.sendChatAction(chatId, "typing").catch(() => {});
+    try {
+      const answer = await askGroq(text);
+      const safeAnswer = answer.length > 3900 ? `${answer.slice(0, 3897)}...` : answer;
+      await bot.sendMessage(chatId, `🤖 Groq AI\n\n${safeAnswer}`, {
+        reply_markup: backKeyboard("main_menu"),
+      });
+    } catch (error) {
+      console.error("Groq AI error:", error.message);
+      await bot.sendMessage(
+        chatId,
+        "❌ AI abhi available nahi hai. Thodi der baad dobara try karein.",
+        { reply_markup: backKeyboard("main_menu") }
+      );
+    }
+    return;
+  }
+
   // ─── Giveaway custom photo upload ───
   if (state?.step === "giveaway_custom_photo") {
     if (msg.photo) {
@@ -4996,7 +5076,7 @@ bot.on("message", async (msg) => {
       `<blockquote>` +
       `Aapka message admin ko bhej diya gaya! 📨\n\n` +
       `Direct support ke liye:\n` +
-      `📩 <b>@nobitasupport</b>\n\n` +
+      `📩 <b>@xvilucifer</b>\n\n` +
       `⚡ Powered by <b>𝑵𝑶𝑩𝑰𝑻𝑨 NETWORK</b>` +
       `</blockquote>\n\n` +
       `✦ ─── <b>𝑵𝑶𝑩𝑰𝑻𝑨 NETWORK</b> ─── ✦`,
@@ -5849,9 +5929,9 @@ bot.onText(/\/help/, async (msg) => {
     `▸ ɢʟᴏʙᴀʟ ꜰᴏʀᴄᴇ-ᴊᴏɪɴ (7D+ ᴘʟᴀɴ)\n` +
     `▸ ᴜɴʟɪᴍɪᴛᴇᴅ ɢɪᴠᴇᴀᴡᴀʏꜱ` +
     `</blockquote>\n\n` +
-    `✈️━━━━<a href="https://t.me/rchiex">━ 𝐍𝐎𝐁𝐈𝐓𝐀 ━</a>━━━━✈️\n` +
-    `<blockquote>⚡️ ᴘᴏᴡᴇʀᴇᴅ : <a href="https://t.me/rchiex">𝐍𝐎𝐁𝐈𝐓𝐀 ɴᴇᴛᴡᴏʀᴋ</a> 🔥\n` +
-    `🔥 ꜱᴜᴘᴘᴏʀᴛ :— <a href="https://t.me/nobitasupport">𝐀𝐁𝐇𝐈𝐒𝐇𝐄𝐊</a> 🔥</blockquote>`,
+    `✈️━━━━<a href="https://t.me/xvilucifer">━ 𝐍𝐎𝐁𝐈𝐓𝐀 ━</a>━━━━✈️\n` +
+    `<blockquote>⚡️ ᴘᴏᴡᴇʀᴇᴅ : <a href="https://t.me/xvilucifer">𝐍𝐎𝐁𝐈𝐓𝐀 ɴᴇᴛᴡᴏʀᴋ</a> 🔥\n` +
+    `🔥 ꜱᴜᴘᴘᴏʀᴛ :— <a href="https://t.me/xvilucifer">𝐀𝐁𝐇𝐈𝐒𝐇𝐄𝐊</a> 🔥</blockquote>`,
     { parse_mode: "HTML", reply_markup: { inline_keyboard: [[{ text: "🏠 ʜᴏᴍᴇ", callback_data: "main_menu", style: "primary" }]] } }
   );
 });
@@ -5913,7 +5993,7 @@ bot.onText(/\/mystats/, async (msg) => {
     `◈ ᴛᴏᴛᴀʟ ᴘᴀʀᴛɪᴄɪᴘᴀɴᴛꜱ ▸  ${totalPart}\n` +
     `◈ ᴛᴏᴛᴀʟ ᴠᴏᴛᴇꜱ ᴄᴀꜱᴛ  ▸  ${totalVotes}` +
     `</blockquote>\n\n` +
-    `✈️━━━━<a href="https://t.me/rchiex">━ 𝐍𝐎𝐁𝐈𝐓𝐀 ━</a>━━━━✈️`,
+    `✈️━━━━<a href="https://t.me/xvilucifer">━ 𝐍𝐎𝐁𝐈𝐓𝐀 ━</a>━━━━✈️`,
     { parse_mode: "HTML", reply_markup: { inline_keyboard: [[{ text: "🏠 ʜᴏᴍᴇ", callback_data: "main_menu", style: "primary" }]] } }
   );
 });
@@ -5977,7 +6057,7 @@ bot.onText(/\/botstatus/, async (msg) => {
     `◈ ᴄʜᴀɴɴᴇʟꜱ       ▸  ${totalChannels}\n` +
     `◈ ᴘᴇɴᴅɪɴɢ ᴘᴀʏꜱ   ▸  ${pendingTotal}` +
     `</blockquote>\n\n` +
-    `✈️━━━━<a href="https://t.me/rchiex">━ 𝐍𝐎𝐁𝐈𝐓𝐀 ━</a>━━━━✈️`,
+    `✈️━━━━<a href="https://t.me/xvilucifer">━ 𝐍𝐎𝐁𝐈𝐓𝐀 ━</a>━━━━✈️`,
     { parse_mode: "HTML", reply_markup: { inline_keyboard: [[{ text: "🏠 ʜᴏᴍᴇ", callback_data: "main_menu", style: "primary" }]] } }
   );
 });
@@ -7722,7 +7802,7 @@ bot.onText(/\/support/, async (msg) => {
     `▸ Screenshot / Photo\n` +
     `▸ Video ya Document\n\n` +
     `Admin se seedha contact:\n` +
-    `📩 <b>@nobitasupport</b>` +
+    `📩 <b>@xvilucifer</b>` +
     `</blockquote>\n\n` +
     `✦ ─── <b>𝑵𝑶𝑩𝑰𝑻𝑨 NETWORK</b> ─── ✦`,
     { parse_mode: "HTML", reply_markup: cancelKeyboard() }
@@ -7909,7 +7989,7 @@ bot.onText(/\/clearallpending/, async (msg) => {
     if (!notified.has(p.userId)) {
       try {
         await bot.sendMessage(p.userId,
-          `<b>❌ Payment Cleared</b>\n\nAdmin ne tumhara pending payment clear kar diya.\nPayment ID: <code>${payId}</code>\n\nKoi sawaal ho toh: <a href="https://t.me/nobitasupport">𝐀𝐁𝐇𝐈𝐒𝐇𝐄𝐊</a>`,
+          `<b>❌ Payment Cleared</b>\n\nAdmin ne tumhara pending payment clear kar diya.\nPayment ID: <code>${payId}</code>\n\nKoi sawaal ho toh: <a href="https://t.me/xvilucifer">𝐀𝐁𝐇𝐈𝐒𝐇𝐄𝐊</a>`,
           { parse_mode: "HTML" }
         );
       } catch {}
@@ -7920,7 +8000,7 @@ bot.onText(/\/clearallpending/, async (msg) => {
     if (!notified.has(p.userId)) {
       try {
         await bot.sendMessage(p.userId,
-          `<b>❌ Payment Cleared</b>\n\nAdmin ne tumhara pending membership payment clear kar diya.\nPayment ID: <code>${payId}</code>\n\nKoi sawaal ho toh: <a href="https://t.me/nobitasupport">𝐀𝐁𝐇𝐈𝐒𝐇𝐄𝐊</a>`,
+          `<b>❌ Payment Cleared</b>\n\nAdmin ne tumhara pending membership payment clear kar diya.\nPayment ID: <code>${payId}</code>\n\nKoi sawaal ho toh: <a href="https://t.me/xvilucifer">𝐀𝐁𝐇𝐈𝐒𝐇𝐄𝐊</a>`,
           { parse_mode: "HTML" }
         );
       } catch {}
@@ -7981,7 +8061,7 @@ bot.onText(/\/removepay\s+(\S+)/, async (msg, match) => {
       `<b>❌ Payment Removed</b>\n\n` +
       `Tumhara pending payment admin ne remove kar diya.\n` +
       `Payment ID: <code>${payId}</code>\n\n` +
-      `Koi sawal ho toh support se contact karo: @nobitasupport`,
+      `Koi sawal ho toh support se contact karo: @xvilucifer`,
       { parse_mode: "HTML" }
     );
   } catch {}
@@ -8350,7 +8430,7 @@ function buildLbCard(g) {
     `👥 Participants: <b>${g.participants.size}</b>\n\n` +
     `<blockquote>${rows.trim()}</blockquote>\n\n` +
     `🕐 Updated: ${istStr} IST\n` +
-    `✈️━━━━<a href="https://t.me/rchiex">━ 𝐍𝐎𝐁𝐈𝐓𝐀 ━</a>━━━━✈️`
+    `✈️━━━━<a href="https://t.me/xvilucifer">━ 𝐍𝐎𝐁𝐈𝐓𝐀 ━</a>━━━━✈️`
   );
 }
 
@@ -9146,7 +9226,7 @@ bot.onText(/\/adminhelp/, async (msg) => {
     `/unblockword &lt;word&gt; — Unblock\n` +
     `/blockedwords — List all blocked` +
     `</blockquote>\n\n` +
-    `✈️━━━━<a href="https://t.me/rchiex">━ 𝐍𝐎𝐁𝐈𝐓𝐀 ━</a>━━━━✈️\n` +
+    `✈️━━━━<a href="https://t.me/xvilucifer">━ 𝐍𝐎𝐁𝐈𝐓𝐀 ━</a>━━━━✈️\n` +
     `<blockquote>🛡️ 𝑵𝑶𝑩𝑰𝑻𝑨 Security Engine v1.0 — Active Protection</blockquote>`;
 
   await bot.sendMessage(msg.chat.id, part1, { parse_mode: "HTML" });
@@ -9231,7 +9311,7 @@ bot.onText(/\/securityhelp/, async (msg) => {
     `/unblockword &lt;word&gt;\n  → Word/phrase unblock karo\n  Example: /unblockword badword\n\n` +
     `/blockedwords\n  → Saare blocked words/phrases ki list dekho` +
     `</blockquote>\n\n` +
-    `✈️━━━━<a href="https://t.me/rchiex">━ 𝐍𝐎𝐁𝐈𝐓𝐀 ━</a>━━━━✈️\n` +
+    `✈️━━━━<a href="https://t.me/xvilucifer">━ 𝐍𝐎𝐁𝐈𝐓𝐀 ━</a>━━━━✈️\n` +
     `<blockquote>🛡️ 𝑵𝑶𝑩𝑰𝑻𝑨 Security Engine v1.0\nHoneypot · Rate Limit · Shadow Ban · Auto-Ban · Word Filter · Emergency Lock · Audit Log</blockquote>`;
 
   await bot.sendMessage(msg.chat.id, sec1, { parse_mode: "HTML" });
@@ -9938,7 +10018,7 @@ bot.onText(/\/about/, async (msg) => {
   if (msg.chat.type !== "private") return;
   await bot.sendMessage(msg.chat.id,
     `✦━━━━━━━━━━━━━━━━━━━━━✦\n   ℹ️  <b>𝐀𝐁𝐎𝐔𝐓 𝐍𝐎𝐁𝐈𝐓𝐀 𝐁𝐎𝐓</b>\n✦━━━━━━━━━━━━━━━━━━━━━✦\n\n` +
-    `<blockquote>◈ ɴᴀᴍᴇ     ▸  <b>𝑵𝑶𝑩𝑰𝑻𝑨 Giveaway Bot</b>\n◈ ᴠᴇʀꜱɪᴏɴ  ▸  <b>v3.0.8</b>\n◈ ɴᴇᴛᴡᴏʀᴋ  ▸  <a href="https://t.me/rchiex">𝑵𝑶𝑩𝑰𝑻𝑨 Network</a>\n◈ ꜱᴜᴘᴘᴏʀᴛ  ▸  <a href="https://t.me/nobitasupport">@nobitasupport</a>\n◈ ʙᴀꜱᴇ    ▸  MongoDB · Node.js · Telegram API\n◈ ꜰᴇᴀᴛᴜʀᴇꜱ ▸  Giveaway · Voting · VIP · Anti-Cheat · Security Engine</blockquote>\n\n✈️━━━━<a href="https://t.me/rchiex">━ 𝐍𝐎𝐁𝐈𝐓𝐀 ━</a>━━━━✈️`,
+     `<blockquote>◈ ɴᴀᴍᴇ     ▸  <b>𝑵𝑶𝑩𝑰𝑻𝑨 Giveaway Bot</b>\n◈ ᴠᴇʀꜱɪᴏɴ  ▸  <b>v3.0.8</b>\n◈ ɴᴇᴛᴡᴏʀᴋ  ▸  <a href="https://t.me/xvilucifer">𝑵𝑶𝑩𝑰𝑻𝑨 Network</a>\n◈ ꜱᴜᴘᴘᴏʀᴛ  ▸  <a href="https://t.me/xvilucifer">@xvilucifer</a>\n◈ ʙᴀꜱᴇ    ▸  MongoDB · Node.js · Telegram API\n◈ ꜰᴇᴀᴛᴜʀᴇꜱ ▸  Giveaway · Voting · VIP · Anti-Cheat · Security Engine</blockquote>\n\n✈️━━━━<a href="https://t.me/xvilucifer">━ 𝐍𝐎𝐁𝐈𝐓𝐀 ━</a>━━━━✈️`,
     { parse_mode: "HTML", reply_markup: { inline_keyboard: [[{ text: "🏠 ʜᴏᴍᴇ", callback_data: "main_menu", style: "primary" }]] } });
 });
 
@@ -9968,7 +10048,7 @@ bot.onText(/\/rules/, async (msg) => {
   if (msg.chat.type !== "private") return;
   await bot.sendMessage(msg.chat.id,
     `✦━━━━━━━━━━━━━━━━━━━━━✦\n   📜  <b>ʙᴏᴛ ʀᴜʟᴇꜱ</b>\n✦━━━━━━━━━━━━━━━━━━━━━✦\n\n` +
-    `<blockquote>1️⃣ <b>Fair Play</b> — Vote manipulation strictly banned\n\n2️⃣ <b>No Spam</b> — Repeated commands = auto-rate-limit + warning\n\n3️⃣ <b>No Hacking</b> — API exploit / bot hack attempt = permanent ban\n\n4️⃣ <b>Payments</b> — Sirf verified screenshots accepted, fake = ban\n\n5️⃣ <b>Channel Membership</b> — Channel chhoda = votes auto-deduct\n\n6️⃣ <b>Respect</b> — Abusive language = warning + ban\n\n7️⃣ <b>VIP Features</b> — Premium features ke liye VIP plan chahiye\n\n⚠️ <i>Rules tod ne par warning aur phir ban — no notice.</i></blockquote>\n\n✈️━━━━<a href="https://t.me/rchiex">━ 𝐍𝐎𝐁𝐈𝐓𝐀 ━</a>━━━━✈️`,
+    `<blockquote>1️⃣ <b>Fair Play</b> — Vote manipulation strictly banned\n\n2️⃣ <b>No Spam</b> — Repeated commands = auto-rate-limit + warning\n\n3️⃣ <b>No Hacking</b> — API exploit / bot hack attempt = permanent ban\n\n4️⃣ <b>Payments</b> — Sirf verified screenshots accepted, fake = ban\n\n5️⃣ <b>Channel Membership</b> — Channel chhoda = votes auto-deduct\n\n6️⃣ <b>Respect</b> — Abusive language = warning + ban\n\n7️⃣ <b>VIP Features</b> — Premium features ke liye VIP plan chahiye\n\n⚠️ <i>Rules tod ne par warning aur phir ban — no notice.</i></blockquote>\n\n✈️━━━━<a href="https://t.me/xvilucifer">━ 𝐍𝐎𝐁𝐈𝐓𝐀 ━</a>━━━━✈️`,
     { parse_mode: "HTML", reply_markup: { inline_keyboard: [[{ text: "🏠 ʜᴏᴍᴇ", callback_data: "main_menu", style: "primary" }]] } });
 });
 
@@ -9977,7 +10057,7 @@ bot.onText(/\/faq/, async (msg) => {
   if (msg.chat.type !== "private") return;
   await bot.sendMessage(msg.chat.id,
     `✦━━━━━━━━━━━━━━━━━━━━━✦\n   ❓  <b>ꜰᴀQ</b>\n✦━━━━━━━━━━━━━━━━━━━━━✦\n\n` +
-    `<blockquote><b>Q: Giveaway kaise banate hain?</b>\n▸ /start → 🎁 New Giveaway → wizard follow karo\n\n<b>Q: Vote kaise milte hain?</b>\n▸ Free: Channel member bano aur vote karo\n▸ Extra: INR ya ⭐ Stars se kharido\n\n<b>Q: VIP ke kya fayde hain?</b>\n▸ Custom thumbnail, unlimited giveaways, extra force-join gate\n\n<b>Q: Vote kyu cut hue?</b>\n▸ Channel chhoda → votes auto-deduct hote hain\n\n<b>Q: Payment verify nahi hui?</b>\n▸ /support se admin ko screenshot bhejo\n\n<b>Q: Bot respond nahi kar raha?</b>\n▸ /start karo, ya /support se contact karo\n\n<b>Q: Winner kaise decide hota hai?</b>\n▸ Top vote wale participants auto-selected hote hain</blockquote>\n\n✈️━━━━<a href="https://t.me/rchiex">━ 𝐍𝐎𝐁𝐈𝐓𝐀 ━</a>━━━━✈️`,
+    `<blockquote><b>Q: Giveaway kaise banate hain?</b>\n▸ /start → 🎁 New Giveaway → wizard follow karo\n\n<b>Q: Vote kaise milte hain?</b>\n▸ Free: Channel member bano aur vote karo\n▸ Extra: INR ya ⭐ Stars se kharido\n\n<b>Q: VIP ke kya fayde hain?</b>\n▸ Custom thumbnail, unlimited giveaways, extra force-join gate\n\n<b>Q: Vote kyu cut hue?</b>\n▸ Channel chhoda → votes auto-deduct hote hain\n\n<b>Q: Payment verify nahi hui?</b>\n▸ /support se admin ko screenshot bhejo\n\n<b>Q: Bot respond nahi kar raha?</b>\n▸ /start karo, ya /support se contact karo\n\n<b>Q: Winner kaise decide hota hai?</b>\n▸ Top vote wale participants auto-selected hote hain</blockquote>\n\n✈️━━━━<a href="https://t.me/xvilucifer">━ 𝐍𝐎𝐁𝐈𝐓𝐀 ━</a>━━━━✈️`,
     { parse_mode: "HTML", reply_markup: { inline_keyboard: [[{ text: "🏠 ʜᴏᴍᴇ", callback_data: "main_menu", style: "primary" }]] } });
 });
 
@@ -10518,7 +10598,7 @@ bot.onText(/\/setownerid(?:\s+(\d+))?/, async (msg, match) => {
     `<blockquote>◈ ᴘᴜʀᴀɴᴀ ɪᴅ  ▸  <code>${oldId}</code>\n` +
     `◈ ɴᴀʏᴀ ɪᴅ    ▸  <code>${newId}</code>\n\n` +
     `✅ DB mein save ho gaya. Restart ke baad bhi yahi ID owner rahega.</blockquote>\n\n` +
-    `✈️━━━━<a href="https://t.me/rchiex">━ 𝐍𝐎𝐁𝐈𝐓𝐀 ━</a>━━━━✈️`,
+    `✈️━━━━<a href="https://t.me/xvilucifer">━ 𝐍𝐎𝐁𝐈𝐓𝐀 ━</a>━━━━✈️`,
     { parse_mode: "HTML", reply_markup: { inline_keyboard: [[{ text: "🏠 ʜᴏᴍᴇ", callback_data: "main_menu", style: "primary" }]] } }
   );
 
@@ -11033,7 +11113,7 @@ async function main() {
         { command: "active",            description: "✅ Show all live giveaways" },
         { command: "winners",           description: "🏆 View winners of a giveaway" },
         { command: "glink",             description: "🔗 Get participation link" },
-        { command: "support",           description: "💬 Contact Support — @nobitasupport" },
+        { command: "support",           description: "💬 Contact Support — @xvilucifer" },
         // ── Admin core (6) ──
         { command: "adminhelp",         description: "👑 Admin command list (4 parts + security)" },
         { command: "stats",             description: "📊 Bot statistics dashboard" },
