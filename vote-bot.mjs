@@ -349,6 +349,19 @@ let freeUnlimited = false;     // if true, all users can create unlimited giveaw
 
 // Default giveaway / channel post image (attached to all channel posts)
 const GIVEAWAY_IMAGE_URL = "https://files.catbox.moe/ntibim.png";
+const DEFAULT_IMAGE_URLS = {
+  welcome: null,
+  giveaway: GIVEAWAY_IMAGE_URL,
+  vote: GIVEAWAY_IMAGE_URL,
+  vip: null
+};
+// Admin-configurable image URLs. Values are persisted in BotConfig.
+let imageUrls = { ...DEFAULT_IMAGE_URLS };
+
+function getImageUrl(type) {
+  if (type === "vip") return imageUrls.vip || null;
+  return imageUrls[type] || DEFAULT_IMAGE_URLS[type] || GIVEAWAY_IMAGE_URL;
+}
 
 // Force join default channels — hardcoded by admin
 // IDs can be updated via /setforcejoin; links/labels always come from defaults
@@ -460,7 +473,16 @@ async function loadStateFromDB() {
 
   // Load config
   const imgConfig = await BotConfigModel.findOne({ key: "welcomeImageUrl" });
-  if (imgConfig) welcomeImageUrl = imgConfig.value;
+  if (imgConfig) {
+    welcomeImageUrl = imgConfig.value;
+    imageUrls.welcome = imgConfig.value || null;
+  }
+
+  const imageUrlsConfig = await BotConfigModel.findOne({ key: "imageUrls" });
+  if (imageUrlsConfig?.value && typeof imageUrlsConfig.value === "object") {
+    imageUrls = { ...DEFAULT_IMAGE_URLS, ...imageUrlsConfig.value };
+    welcomeImageUrl = imageUrls.welcome || welcomeImageUrl;
+  }
 
   const qrConfig = await BotConfigModel.findOne({ key: "membershipQrFileId" });
   if (qrConfig) membershipQrFileId = qrConfig.value;
@@ -1276,8 +1298,31 @@ function membershipBadge(uid) {
 async function isMember(chatId, userId) {
   try {
     const m = await bot.getChatMember(chatId, userId);
-    return ["member", "administrator", "creator"].includes(m.status);
+    // Telegram uses "restricted" for users who are joined but have
+    // restricted permissions. They are still channel members.
+    return ["member", "administrator", "creator", "restricted"].includes(m.status);
   } catch { return false; }
+}
+
+function channelUsernameFromLink(link) {
+  if (!link) return null;
+  const match = String(link).match(/^https?:\/\/t\.me\/([A-Za-z0-9_]+)/i);
+  return match ? `@${match[1]}` : null;
+}
+
+// A public channel can be checked by username even when its numeric ID was
+// never saved (or an old ID was saved). Private invite links still require
+// the numeric channel ID.
+async function checkChannelMembership(channel, userId) {
+  const refs = [];
+  if (channel?.id) refs.push(channel.id);
+  const username = channelUsernameFromLink(channel?.link);
+  if (username && !refs.includes(username)) refs.push(username);
+  if (!refs.length) return true;
+  for (const ref of refs) {
+    if (await isMember(ref, userId)) return true;
+  }
+  return false;
 }
 
 async function isChannelAdmin(chatId, userId) {
@@ -1326,14 +1371,7 @@ async function checkForceJoin(userId) {
 
   const missing = [];
   for (const ch of allWithLink) {
-    if (ch.id) {
-      // Can verify membership properly
-      try {
-        const member = await isMember(ch.id, userId);
-        if (!member) missing.push(ch);
-      } catch { missing.push(ch); }
-    }
-    // No ID = can't verify, trust the user (they still see join buttons)
+    if (!(await checkChannelMembership(ch, userId))) missing.push(ch);
   }
   return { passed: missing.length === 0, missing };
 }
@@ -1464,7 +1502,7 @@ async function sendWelcome(chatId, userId) {
     `</blockquote>`;
 
   // Send photo first with spoiler + first animation frame as caption
-  const imgUrl = welcomeImageUrl || GIVEAWAY_IMAGE_URL;
+  const imgUrl = getImageUrl("welcome");
   let finalMsg;
   try {
     finalMsg = await bot.sendPhoto(chatId, imgUrl, {
@@ -2615,7 +2653,7 @@ bot.on("callback_query", async (query) => {
       try {
         const sentMsg = await bot.sendPhoto(
           g.channelId,
-          GIVEAWAY_IMAGE_URL,
+          getImageUrl("vote"),
           {
             caption: participantChannelText(participant, g),
             parse_mode: "HTML",
@@ -2822,7 +2860,7 @@ bot.on("callback_query", async (query) => {
       }).catch(() => {});
       // Big photo warning — same style as welcome screen
       try {
-        const denyPhoto = await bot.sendPhoto(userId, GIVEAWAY_IMAGE_URL, {
+        const denyPhoto = await bot.sendPhoto(userId, getImageUrl("vote"), {
           caption: `◈`,
           parse_mode: "HTML",
           has_spoiler: true
@@ -3175,7 +3213,21 @@ bot.on("callback_query", async (query) => {
       ? { inline_keyboard: [[{ text: "`ʙᴀᴄᴋ, ◀️", callback_data: "main_menu", style: "danger" }]] }
       : { inline_keyboard: buildPlanButtons() };
 
-    await animFresh(chatId, msgId, featuresText, { reply_markup: kb });
+    const vipImage = getImageUrl("vip");
+    if (vipImage) {
+      try {
+        await bot.deleteMessage(chatId, msgId);
+        await bot.sendPhoto(chatId, vipImage, {
+          caption: "👑 VIP MEMBERSHIP",
+          parse_mode: "HTML"
+        });
+        await bot.sendMessage(chatId, featuresText, { parse_mode: "HTML", reply_markup: kb });
+      } catch {
+        await animFresh(chatId, msgId, featuresText, { reply_markup: kb });
+      }
+    } else {
+      await animFresh(chatId, msgId, featuresText, { reply_markup: kb });
+    }
     return;
   }
 
@@ -4445,7 +4497,7 @@ async function finishGiveawayCreation(userId, chatId, qrFileId) {
       `✦━━━━━━━━━━━━━━━━━━━━━━━━━━━━✦\n` +
       `⚡  Powered by  <b>@${BOT_USERNAME}</b>\n` +
       `✦━━━━━━━━━━━━━━━━━━━━━━━━━━━━✦`;
-    const photoSrc = g.customPhotoId || GIVEAWAY_IMAGE_URL;
+    const photoSrc = g.customPhotoId || getImageUrl("vote");
     try {
       let announceSent;
       if (g.customPhotoId) {
@@ -4455,7 +4507,7 @@ async function finishGiveawayCreation(userId, chatId, qrFileId) {
           reply_markup: { inline_keyboard: [[{ text: "✦ JOIN NOW — TAP HERE ✦", url: link, style: "success" }]] }
         });
       } else {
-        announceSent = await bot.sendPhoto(g.channelId, GIVEAWAY_IMAGE_URL, {
+        announceSent = await bot.sendPhoto(g.channelId, getImageUrl("giveaway"), {
           caption: channelAnnouncement,
           parse_mode: "HTML",
           reply_markup: { inline_keyboard: [[{ text: "✦ JOIN NOW — TAP HERE ✦", url: link, style: "success" }]] }
@@ -5361,7 +5413,9 @@ bot.on("message", async (msg) => {
       return;
     }
     welcomeImageUrl = url;
+    imageUrls.welcome = url;
     await saveConfig("welcomeImageUrl", url);
+    await saveConfig("imageUrls", imageUrls);
     userState.delete(userId);
     await bot.sendMessage(chatId,
       `✅ <b>Welcome image URL updated!</b>\n\nURL: <code>${h(url)}</code>\n\nThis image will appear in <b>spoiler mode</b> when users run /start. 🎭`,
@@ -6192,7 +6246,7 @@ async function doBroadcast(adminChatId, adminMsg, textContent, silent, target = 
             `${bcHeader}\n\n` +
             `<blockquote>${h(textContent)}</blockquote>\n\n` +
             `${bcFooter}`;
-          sentMsg = await bot.sendPhoto(id, GIVEAWAY_IMAGE_URL, {
+          sentMsg = await bot.sendPhoto(id, getImageUrl("giveaway"), {
             caption, parse_mode: "HTML", disable_notification: silent
           });
         }
@@ -6518,7 +6572,7 @@ bot.onText(/\/broadcastpreview(?:\s+([\s\S]+))?/, async (msg, match) => {
         `${bcHeader}\n\n` +
         `<blockquote>${h(rawText)}</blockquote>\n\n` +
         `${bcFooter}`;
-      await bot.sendPhoto(chatId, GIVEAWAY_IMAGE_URL, {
+      await bot.sendPhoto(chatId, getImageUrl("giveaway"), {
         caption: fullCaption, parse_mode: "HTML"
       });
     }
@@ -6911,11 +6965,83 @@ bot.onText(/\/setwelcomeimageurl/, async (msg) => {
   );
 });
 
+// /setimage <welcome|giveaway|vote|vip> <direct URL>
+// All image settings are stored in MongoDB and survive restarts.
+bot.onText(/\/setimage(?:\s+([a-zA-Z]+))?(?:\s+(\S+))?/, async (msg, match) => {
+  if (msg.chat.type !== "private" || !isAdmin(msg.from.id)) return;
+  const type = (match?.[1] || "").toLowerCase();
+  const url = (match?.[2] || "").trim();
+  const validTypes = ["welcome", "giveaway", "vote", "vip"];
+  if (!validTypes.includes(type) || !url) {
+    return bot.sendMessage(msg.chat.id,
+      `<b>🖼️ Image URL Commands</b>\n\n` +
+      `<code>/setimage welcome https://...</code> — /start menu\n` +
+      `<code>/setimage giveaway https://...</code> — giveaway announcement\n` +
+      `<code>/setimage vote https://...</code> — channel vote cards\n` +
+      `<code>/setimage vip https://...</code> — VIP membership card\n\n` +
+      `Reset: <code>/clearimage &lt;type&gt;</code>\nStatus: <code>/imageinfo</code>\n\n` +
+      `<i>Direct http/https image URL bhejo. Setting MongoDB me permanent save hoti hai.</i>`,
+      { parse_mode: "HTML" });
+  }
+  try { new URL(url); } catch {
+    return bot.sendMessage(msg.chat.id, "❌ Invalid URL. http:// ya https:// direct image URL bhejo.");
+  }
+  imageUrls[type] = url;
+  if (type === "welcome") {
+    welcomeImageUrl = url;
+    await saveConfig("welcomeImageUrl", url);
+  }
+  await saveConfig("imageUrls", imageUrls);
+  await bot.sendMessage(msg.chat.id,
+    `✅ <b>${type.toUpperCase()} image updated permanently!</b>\n\n` +
+    `🔗 <code>${h(url)}</code>\n\n` +
+    `<i>MongoDB me save ho gaya. Naye cards/posts me ye image use hogi.</i>`,
+    { parse_mode: "HTML" });
+});
+
+// Short aliases for the four image slots.
+for (const type of ["welcome", "giveaway", "vote", "vip"]) {
+  bot.onText(new RegExp(`\\/set${type}image(?:\\s+)(\\S+)`), async (msg, match) => {
+    if (msg.chat.type !== "private" || !isAdmin(msg.from.id)) return;
+    const url = (match?.[1] || "").trim();
+    try { new URL(url); } catch {
+      return bot.sendMessage(msg.chat.id, "❌ Invalid URL. http:// ya https:// direct image URL bhejo.");
+    }
+    imageUrls[type] = url;
+    if (type === "welcome") {
+      welcomeImageUrl = url;
+      await saveConfig("welcomeImageUrl", url);
+    }
+    await saveConfig("imageUrls", imageUrls);
+    await bot.sendMessage(msg.chat.id,
+      `✅ <b>${type.toUpperCase()} image updated permanently!</b>\n🔗 <code>${h(url)}</code>`,
+      { parse_mode: "HTML" });
+  });
+}
+
+// /clearimage <type> — restore the selected slot's default behavior
+bot.onText(/\/clearimage(?:\s+([a-zA-Z]+))?/, async (msg, match) => {
+  if (msg.chat.type !== "private" || !isAdmin(msg.from.id)) return;
+  const type = (match?.[1] || "").toLowerCase();
+  if (!["welcome", "giveaway", "vote", "vip"].includes(type)) {
+    return bot.sendMessage(msg.chat.id, "Usage: <code>/clearimage welcome|giveaway|vote|vip</code>", { parse_mode: "HTML" });
+  }
+  imageUrls[type] = DEFAULT_IMAGE_URLS[type];
+  if (type === "welcome") {
+    welcomeImageUrl = null;
+    await saveConfig("welcomeImageUrl", null);
+  }
+  await saveConfig("imageUrls", imageUrls);
+  await bot.sendMessage(msg.chat.id, `✅ ${type.toUpperCase()} image reset ho gayi.`, { parse_mode: "HTML" });
+});
+
 // /clearwelcomeimage — Remove welcome banner
 bot.onText(/\/clearwelcomeimage/, async (msg) => {
   if (msg.chat.type !== "private" || !isAdmin(msg.from.id)) return;
   welcomeImageUrl = null;
+  imageUrls.welcome = null;
   await saveConfig("welcomeImageUrl", null);
+  await saveConfig("imageUrls", imageUrls);
   await bot.sendMessage(msg.chat.id, "✅ Welcome banner image has been removed.", { parse_mode: "HTML" });
 });
 
@@ -6934,7 +7060,10 @@ bot.onText(/\/imageinfo/, async (msg) => {
   if (msg.chat.type !== "private" || !isAdmin(msg.from.id)) return;
   await bot.sendMessage(msg.chat.id,
     `<b>🖼️ Image Status</b>\n\n` +
-    `Welcome Image URL: ${welcomeImageUrl ? `✅ Set\n<code>${h(welcomeImageUrl)}</code>` : "❌ Not set"}\n` +
+    `Welcome: ${imageUrls.welcome ? `✅ Set\n<code>${h(imageUrls.welcome)}</code>` : "↩️ Default"}\n` +
+    `Giveaway: ${imageUrls.giveaway ? `✅ Set\n<code>${h(imageUrls.giveaway)}</code>` : "↩️ Default"}\n` +
+    `Vote Card: ${imageUrls.vote ? `✅ Set\n<code>${h(imageUrls.vote)}</code>` : "↩️ Default"}\n` +
+    `VIP Card: ${imageUrls.vip ? `✅ Set\n<code>${h(imageUrls.vip)}</code>` : "❌ Not set"}\n` +
     `Membership QR: ${membershipQrFileId ? "✅ Set" : "❌ Not set"}`,
     { parse_mode: "HTML" }
   );
@@ -9966,7 +10095,8 @@ const KNOWN_COMMANDS = new Set([
   "setlbbroadcast","stoplbbroadcast","listlbbroadcast",
   "setstar","setinr","setpanelthreshold","schedule","schedulelist","cancelschedule",
   "setwelcomemsg","clearwelcomemsg","setwelcomeimageurl","clearwelcomeimage",
-  "setmembershipqr","imageinfo","setforcejoin","forcejoininfo","setfreelimit",
+  "setmembershipqr","setimage","setwelcomeimage","setgiveawayimage","setvoteimage","setvipimage",
+  "clearimage","imageinfo","setforcejoin","forcejoininfo","setfreelimit",
   "perms","viewperms","setperms","paystats","removepay","clearallpending","maintenance",
   "cleandb","setstartimage","clearstates","gcount","topusers",
   "securityhelp","honeypot","honeytrap","removetrap","listtraps","honeypotlist","cleanhoneypot",

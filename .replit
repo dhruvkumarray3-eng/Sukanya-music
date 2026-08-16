@@ -32,3 +32,8 @@ outputType = "console"
 [[ports]]
 localPort = 3000
 externalPort = 80
+
+[userenv]
+
+[userenv.shared]
+GITHUB_REPO_URL = "https://github.com/dhruvkumarray3-eng/Sukanya-music"
