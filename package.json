@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "start": "node vote-bot.mjs",
-    "dev": "node --watch vote-bot.mjs"
+    "dev": "node --watch vote-bot.mjs",
+    "build:miniapp": "npm --prefix web run build",
+    "dev:miniapp": "npm --prefix web run dev"
   },
   "dependencies": {
     "mongoose": "^8.24.0",

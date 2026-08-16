@@ -8,6 +8,7 @@
 import TelegramBot from "node-telegram-bot-api";
 import mongoose from "mongoose";
 import http from "http";
+import { handleMiniAppRequest } from "./miniapp-api.mjs";
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const MAIN_ADMIN_ID = Number(process.env.ADMIN_ID);
@@ -175,6 +176,7 @@ const botStartTime = Date.now();
 let heartbeatReportEnabled = true; // send report to owner every 3 min
 let unknownCmdAlertEnabled = true; // show alert for unknown commands
 const HEARTBEAT_PORT = process.env.PORT || 3000;
+const MINI_APP_URL = process.env.MINI_APP_URL || process.env.WEB_APP_URL || "";
 
 function getUptimeStr() {
   const ms = Date.now() - botStartTime;
@@ -1482,8 +1484,7 @@ function forceJoinKeyboard(channels) {
 function mainMenuKeyboard() {
   // Inline keyboard buttons don't support HTML — strip <tg-emoji> tags, keep fallback char
   const btn = key => stripTgEmoji(getUI(key));
-  return {
-    inline_keyboard: [
+  const rows = [
       [
         { text: btn("welcome.btn_new_giveaway"), callback_data: "new_giveaway", style: "primary" },
         { text: btn("welcome.btn_my_giveaways"), callback_data: "my_giveaways", style: "success" }
@@ -1498,8 +1499,11 @@ function mainMenuKeyboard() {
       ],
       [{ text: `${themeEmoji("success")}${btn("welcome.btn_ai")}`, callback_data: "ai_assistant", style: "success" }],
       [{ text: btn("welcome.btn_guide"),        callback_data: "how_to_use",     style: "success" }]
-    ]
-  };
+    ];
+  if (MINI_APP_URL) {
+    rows.unshift([{ text: "Open Sukanya Music", web_app: { url: MINI_APP_URL }, style: "primary" }]);
+  }
+  return { inline_keyboard: rows };
 }
 
 function cpComposePrompt(title, username, chId) {
@@ -1615,6 +1619,31 @@ async function sendWelcome(chatId, userId) {
   const msgId = finalMsg?.message_id;
   if (msgId) userLastWelcomeMsg.set(userId, { chatId, msgId });
 }
+
+// ============================================================
+// SUKANYA MUSIC MINI APP
+// ============================================================
+
+bot.onText(/\/(?:app|music)(?:\s+.*)?/, async (msg) => {
+  if (!MINI_APP_URL) {
+    await bot.sendMessage(
+      msg.chat.id,
+      "Sukanya Music Mini App abhi configure nahi hai. Admin ko MINI_APP_URL set karna hoga.",
+    );
+    return;
+  }
+
+  await bot.sendMessage(
+    msg.chat.id,
+    "<b>Sukanya Music</b>\n\nYouTube music discover karne ke liye mini app open karein.",
+    {
+      parse_mode: "HTML",
+      reply_markup: {
+        inline_keyboard: [[{ text: "Open Sukanya Music", web_app: { url: MINI_APP_URL } }]],
+      },
+    },
+  );
+});
 
 // ============================================================
 // /start HANDLER
@@ -11125,6 +11154,7 @@ async function main() {
       // Register user-facing commands for ALL users (shows in bot menu for everyone)
       await bot.setMyCommands([
         { command: "start",        description: "🎁 Open 𝑵𝑶𝑩𝑰𝑻𝑨 Giveaway Bot" },
+        { command: "app",          description: "Open Sukanya Music Mini App" },
         { command: "help",         description: "📖 Full user guide & all commands" },
         { command: "membership",   description: "👑 Get VIP Membership" },
         { command: "myplan",       description: "📋 Check my membership status & expiry" },
@@ -11145,6 +11175,7 @@ async function main() {
       await bot.setMyCommands([
         // ── User commands (15) ──
         { command: "start",             description: "🎁 Open 𝑵𝑶𝑩𝑰𝑻𝑨 Giveaway Bot" },
+        { command: "app",               description: "Open Sukanya Music Mini App" },
         { command: "help",              description: "📖 Full user guide & all commands" },
         { command: "membership",        description: "👑 Get Premium Membership" },
         { command: "myplan",            description: "📋 Check my membership status" },
@@ -11259,25 +11290,34 @@ async function main() {
     } catch (e) { console.error("setMyCommands error:", e.message); }
 
     // 🌐 HTTP Health Server — keeps bot alive via self-ping + external uptime monitors
-    http.createServer((req, res) => {
-      const url = req.url || "/";
-      if (url === "/ping") {
-        res.writeHead(200, { "Content-Type": "text/plain" });
-        res.end("OK");
-      } else if (url === "/health") {
-        const activeGiveaways = [...giveaways.values()].filter(g => g.active).length;
-        res.writeHead(200, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({
-          status: "alive",
-          uptime: getUptimeStr(),
-          users: botUsers.size,
-          activeGiveaways,
-          db: mongoose.connection.readyState === 1 ? "connected" : "disconnected",
-          heartbeatReport: heartbeatReportEnabled
-        }));
-      } else {
-        res.writeHead(200, { "Content-Type": "text/plain" });
-        res.end(`𝑵𝑶𝑩𝑰𝑻𝑨 Giveaway Bot — Alive ✅\nUptime: ${getUptimeStr()}`);
+    http.createServer(async (req, res) => {
+      try {
+        if (await handleMiniAppRequest(req, res)) return;
+        const url = req.url || "/";
+        if (url === "/ping") {
+          res.writeHead(200, { "Content-Type": "text/plain" });
+          res.end("OK");
+        } else if (url === "/health") {
+          const activeGiveaways = [...giveaways.values()].filter(g => g.active).length;
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({
+            status: "alive",
+            uptime: getUptimeStr(),
+            users: botUsers.size,
+            activeGiveaways,
+            db: mongoose.connection.readyState === 1 ? "connected" : "disconnected",
+            heartbeatReport: heartbeatReportEnabled,
+            miniApp: Boolean(MINI_APP_URL),
+            youtubeApi: Boolean(process.env.YOUTUBE_API_KEY),
+          }));
+        } else {
+          res.writeHead(200, { "Content-Type": "text/plain" });
+          res.end(`𝑵𝑶𝑩𝑰𝑻𝑨 Giveaway Bot — Alive ✅\nUptime: ${getUptimeStr()}`);
+        }
+      } catch (error) {
+        if (!res.headersSent) res.writeHead(500, { "Content-Type": "text/plain" });
+        res.end("Internal server error");
+        console.error("Mini app request error:", error.message);
       }
     }).listen(HEARTBEAT_PORT, () => {
       console.log(`🌐 Health server started on port ${HEARTBEAT_PORT}`);

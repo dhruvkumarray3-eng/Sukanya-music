@@ -44,6 +44,43 @@ Complete Telegram command inventory: [`COMMANDS.md`](COMMANDS.md)
 
 ---
 
+## Sukanya Music Mini App
+
+The bot now includes a premium Telegram Mini App for discovering and playing YouTube music:
+
+- `/app` or `/music` opens the Mini App from Telegram.
+- The home screen loads music from YouTube Trending in the India region.
+- Search, queue, favorites, player controls, and Telegram WebApp actions are included.
+- YouTube credentials stay server-side; the browser never receives the API key.
+
+### Mini App setup
+
+Add these environment variables before starting the bot:
+
+```env
+YOUTUBE_API_KEY=your_youtube_data_api_key
+MINI_APP_URL=https://your-public-https-domain
+```
+
+`MINI_APP_URL` must be a public HTTPS URL for Telegram. The bot serves the built app from the same Node process on `PORT` (default `3000`).
+
+```bash
+npm install
+npm --prefix web install
+npm run build:miniapp
+npm start
+```
+
+For frontend development, keep the bot running on port `3000` and run:
+
+```bash
+npm run dev:miniapp
+```
+
+The Vite dev server proxies `/api` requests to the bot server.
+
+---
+
 ```
 ✦━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━✦
                     FEATURES
