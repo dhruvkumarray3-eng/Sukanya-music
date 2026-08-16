@@ -206,7 +206,52 @@ function getAllPremiumEmojiTags(fallback = "✨") {
   return premiumEmojis.slice(0, 5).map(e => `<tg-emoji emoji-id="${e.id}">${fallback}</tg-emoji>`).join(" ");
 }
 
-async function askGroq(prompt) {
+const AI_PUBLIC_CONTEXT = `
+You are the in-bot assistant for a Telegram giveaway and voting bot.
+The assistant should help with any general question, but prioritize these real bot workflows:
+
+PUBLIC COMMANDS:
+/start opens the main menu.
+/membership shows VIP plans and purchase flow; /myplan shows the user's VIP status and expiry.
+/active shows live giveaways; /winners shows recent winners; /leaderboard and /topvoters show rankings.
+/mystats shows personal statistics; /stats shows the bot statistics dashboard.
+/glink gets a giveaway participation link; /createpost creates a channel post when the user has a registered channel.
+/countdown shows giveaway countdown; /rank shows global rank; /invite explains inviting the bot.
+/notify shows notification information; /refer shows the referral link; /feedback sends feedback.
+/support opens support; /about shows bot details; /version and /uptime show runtime information.
+/rules, /faq, and /terms explain rules, common questions, and terms.
+/help shows the complete user guide.
+
+GIVEAWAY WORKFLOW:
+The creator adds the bot as an administrator in the target channel, opens /start, taps New Giveaway,
+then follows the wizard: title, channel, end configuration, participation/payment settings, and optional image.
+The bot posts a participation card and creates a unique join link. Users must satisfy force-join rules
+before voting. Channel members can vote, paid votes can use INR/UPI or Telegram Stars, and leaving a
+required channel can remove votes. Leaders and winners are tracked by the bot.
+
+WHAT YOU CAN HELP WITH:
+Explain commands step by step, troubleshoot giveaway/voting/VIP/force-join/payment issues, draft giveaway
+titles, rules, captions, announcements and winner messages, and explain how the bot's existing features work.
+Answer in the user's language, usually Hindi or Hinglish, with short practical steps and examples.
+Use only the behavior described here. Never invent a command or claim that you executed a command.
+If a detail is uncertain, say so and direct the user to /help, /adminhelp, /securityhelp, or /support.
+`;
+
+const AI_ADMIN_CONTEXT = `
+The current user is the main admin or an authorized admin. Admin help may cover these existing areas:
+giveaway management (/endgiveaway, /cancelgiveaway, /resetvotes, /setwinner, /clonegiveaway, /announce,
+/addvotes, /removevotes), channels and posts (/allchannels, /setforcejoin, /forcejoininfo, /createpost),
+membership and payments (/givemem, /removemem, /extendmem, /listmem, /meminfo, /setplan, /setinr,
+/setstar, /paystats), user management (/ban, /unban, /userinfo, /listusers, /dm, /reply),
+broadcasts (/broadcast, /broadcastpreview, /broadcaststats, /loud, /send, /sendloud, /pin, /schedule),
+UI and settings (/customize, /settext, /resettext, /setwelcomemsg, /setimage, /setwelcomeimageurl,
+/setbuttontheme, /setprimaryemoji), and security (/securityhelp, /securitymode, /warnuser, /muteuser,
+/shadowban, /trustuser, /blockedwords, /honeypot, /auditlog, /securityreport).
+Explain permissions, required arguments, and safe usage. Never reveal secrets, tokens, database values,
+or suggest destructive actions without warning the admin first.
+`;
+
+async function askGroq(prompt, isAdminUser) {
   if (!GROQ_API_KEY) {
     throw new Error("GROQ_API_KEY is not configured");
   }
@@ -225,9 +270,9 @@ async function askGroq(prompt) {
         {
           role: "system",
           content:
-            "You are a helpful Telegram bot assistant. Reply in the same language as the user, usually concise Hindi or Hinglish. Be practical, friendly, and never claim to perform actions you cannot perform.",
+            `${AI_PUBLIC_CONTEXT}\n${isAdminUser ? AI_ADMIN_CONTEXT : "The current user is not an admin. Do not provide admin-only operational instructions; suggest /support if admin help is needed."}`,
         },
-        { role: "user", content: prompt },
+        { role: "user", content: prompt.slice(0, 2400) },
       ],
     }),
   });
@@ -1451,7 +1496,7 @@ function mainMenuKeyboard() {
         { text: btn("welcome.btn_vip"),         callback_data: "vip_membership", style: "danger"  },
         { text: btn("welcome.btn_create_post"), callback_data: "create_post",    style: "primary" }
       ],
-      [{ text: btn("welcome.btn_ai"),             callback_data: "ai_assistant",  style: "primary" }],
+      [{ text: `${themeEmoji("success")}${btn("welcome.btn_ai")}`, callback_data: "ai_assistant", style: "success" }],
       [{ text: btn("welcome.btn_guide"),        callback_data: "how_to_use",     style: "success" }]
     ]
   };
@@ -4709,7 +4754,7 @@ bot.on("message", async (msg) => {
     userState.delete(userId);
     await bot.sendChatAction(chatId, "typing").catch(() => {});
     try {
-      const answer = await askGroq(text);
+      const answer = await askGroq(text, isAdmin(userId));
       const safeAnswer = answer.length > 3900 ? `${answer.slice(0, 3897)}...` : answer;
       await bot.sendMessage(chatId, `🤖 Groq AI\n\n${safeAnswer}`, {
         reply_markup: backKeyboard("main_menu"),
