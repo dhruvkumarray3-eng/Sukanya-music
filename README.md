@@ -22,9 +22,9 @@
 [![Node.js](https://img.shields.io/badge/Runtime-Node.js%2018+-339933?style=for-the-badge&logo=nodedotjs&logoColor=white)](#)
 [![License](https://img.shields.io/badge/License-MIT-gold?style=for-the-badge)](#)
 
-[![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/new/template?template=https://github.com/mystricman0-cell/telegram-vote-bot)
+[![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/new/template?template=https://github.com/dhruvkumarray3-eng/Sukanya-music)
 &nbsp;&nbsp;
-[![Run on Replit](https://replit.com/badge/github/mystricman0-cell/telegram-vote-bot)](https://replit.com/new/github/mystricman0-cell/telegram-vote-bot)
+[![Run on Replit](https://replit.com/badge/github/dhruvkumarray3-eng/Sukanya-music)](https://replit.com/new/github/dhruvkumarray3-eng/Sukanya-music)
 
 </div>
 
@@ -776,7 +776,7 @@ When a panel is detected, you get these buttons instantly:
 
 ### ▸ &nbsp;Railway &nbsp;*(Recommended)*
 
-[![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/new/template?template=https://github.com/mystricman0-cell/telegram-vote-bot)
+[![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/new/template?template=https://github.com/dhruvkumarray3-eng/Sukanya-music)
 
 ```
 1. Click Deploy on Railway
@@ -786,7 +786,7 @@ When a panel is detected, you get these buttons instantly:
 
 ### ▸ &nbsp;Replit
 
-[![Run on Replit](https://replit.com/badge/github/mystricman0-cell/telegram-vote-bot)](https://replit.com/new/github/mystricman0-cell/telegram-vote-bot)
+[![Run on Replit](https://replit.com/badge/github/dhruvkumarray3-eng/Sukanya-music)](https://replit.com/new/github/dhruvkumarray3-eng/Sukanya-music)
 
 ```
 1. Click Run on Replit
@@ -797,7 +797,7 @@ When a panel is detected, you get these buttons instantly:
 ### ▸ &nbsp;Manual / VPS
 
 ```bash
-git clone https://github.com/mystricman0-cell/telegram-vote-bot.git
+git clone https://github.com/dhruvkumarray3-eng/Sukanya-music.git
 cd telegram-vote-bot
 npm install
 TELEGRAM_BOT_TOKEN=xxx ADMIN_ID=xxx MONGODB_URI=xxx npm start
@@ -1064,7 +1064,7 @@ vote-bot.mjs
 ```bash
 # 1. Fork this repo on GitHub
 # 2. Clone your fork
-git clone https://github.com/YOUR_USERNAME/telegram-vote-bot.git
+git clone https://github.com/dhruvkumarray3-eng/Sukanya-music.git
 cd telegram-vote-bot
 
 # 3. Install dependencies
@@ -1088,6 +1088,6 @@ All bot logic lives in a **single file** — `vote-bot.mjs` — making it easy t
 
 [![Telegram](https://img.shields.io/badge/Bot-@Nobitavotebot-2CA5E0?style=for-the-badge&logo=telegram&logoColor=white)](https://t.me/Nobitavotebot)
 [![Developer](https://img.shields.io/badge/Developer-@rchiex-2CA5E0?style=for-the-badge&logo=telegram&logoColor=white)](https://t.me/rchiex)
-[![GitHub](https://img.shields.io/badge/Owner-mystricman0--cell-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/mystricman0-cell)
+[![GitHub](https://img.shields.io/badge/Owner-dhruvkumarray3--eng-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/dhruvkumarray3-eng)
 
 </div>
