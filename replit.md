@@ -14,6 +14,10 @@ npm start
 ```
 The workflow "Start application" runs `npm start` automatically.
 
+For Railway/Docker deployments, `start.sh` verifies the production packages
+before starting the bot. The complete Telegram command inventory is in
+`COMMANDS.md`.
+
 ## Required secrets
 | Secret | Description |
 |---|---|

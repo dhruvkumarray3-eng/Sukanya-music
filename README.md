@@ -40,6 +40,8 @@
 
 > Real-time leaderboards · Paid voting (INR/UPI + Telegram Stars) · VIP memberships · Force-join gates · Animated UI · MongoDB persistence
 
+Complete Telegram command inventory: [`COMMANDS.md`](COMMANDS.md)
+
 ---
 
 ```

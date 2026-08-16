@@ -4,8 +4,10 @@ WORKDIR /app
 
 COPY package*.json ./
 
-RUN npm ci --omit=dev
+RUN npm ci --omit=dev --ignore-scripts --no-audit --no-fund
 
 COPY . .
 
-CMD ["node", "vote-bot.mjs"]
+RUN chmod +x start.sh
+
+CMD ["./start.sh"]
